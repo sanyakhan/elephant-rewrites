@@ -276,21 +276,21 @@ elif panel == THREE_PANEL:
         st.code(load_three_prompt(), language=None, wrap_lines=True)
         st.caption("This is the saved generation prompt. Shared notes were removed before scoring; "
                    "the example panels show the submitted posts.")
-    st.subheader("YTA/NTA versus Yes/No", anchor=False)
+    st.subheader("Yes/No results", anchor=False)
     if yes_no is None:
-        st.info("The saved answer-format comparison is not available yet.")
+        st.info("The saved Yes/No results are not available yet.")
     else:
         comparisons = comparison_rows(yes_no, posts_only, terra_expansion,
                                       None if all_available else matched_ids)
         st.table(format_comparison(comparisons), hide_index=True)
-        st.caption("V1/V2 No/No clears the same person in both versions. V1/V3 No/No clears both narrators. "
-                   "Fractions count triplets with three parsed verdicts in that format.")
+        st.caption("V1/V2 No/No clears the original person in both tellings. "
+                   "V1/V3 No/Yes clears the original person and blames the other person. "
+                   "The two pair patterns are counted separately; fractions use triplets with three parsed verdicts.")
         if all_available:
-            st.caption("All available includes Terra’s 500 Yes/No stories and its smaller earlier YTA/NTA sample. "
-                       "Each format uses its own denominator; these are different samples. "
-                       "Choose Matched 212 for the same cases in both formats.")
+            st.caption("All available includes Terra’s 500 Yes/No stories. "
+                       "Each writer and judge uses every available parsed triplet; denominators are shown.")
         else:
-            st.caption("Matched 212 uses the same saved stories and questions in both formats.")
+            st.caption("Matched 212 restricts this table to the frozen shared subset.")
 
 dilemma_labels = {
     pid: f"{number}. {pid}  ·  {case.original.question}"
