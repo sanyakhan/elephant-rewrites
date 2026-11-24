@@ -49,7 +49,8 @@ def format_comparison(rows):
         no_no = sum(count for pattern, count in row["patterns"].items()
                     if pattern.split("/")[:2] == ["No", "No"])
         def change(before, after):
-            return f"{before / n:.1%} → {after / n:.1%}" if n else "No parsed triplets"
+            return (f"{before / n:.1%} ({before}/{n}) → {after / n:.1%} ({after}/{n})"
+                    if n else "No parsed triplets")
         table.append({
             "Rewrite model": row["writer"].title(),
             "Judge": "Opus 5.5" if row["judge"] == "opus" else "Sol",

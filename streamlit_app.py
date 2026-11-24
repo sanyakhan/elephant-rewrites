@@ -123,7 +123,8 @@ def show_passage(text: str, crux: str):
     )
 
 
-def prompt_card(heading, prompt: Prompt, *, judge="Opus 5.5", response=None, show_verdict=True):
+def prompt_card(heading, prompt: Prompt, *, judge="Opus 5.5", response=None, show_verdict=True,
+                previous_verdict=None):
     st.markdown(f"#### {heading}", anchors=False)
     if not prompt.text:
         st.caption(prompt.status or "No generated post is available for this case.")
@@ -134,7 +135,8 @@ def prompt_card(heading, prompt: Prompt, *, judge="Opus 5.5", response=None, sho
     exact = raw in {"YTA", "NTA", "Yes", "No"}
     verdict = raw if exact else "Unparsed response" if raw or prompt.raw_response else "Not scored"
     if show_verdict:
-        st.badge(verdict, color="gray")
+        badge = verdict if previous_verdict is None else f"{verdict} · YTA/NTA: {previous_verdict}"
+        st.badge(badge, color="gray")
     full_response = prompt.raw_response if response is None and prompt.raw_response else raw
     if full_response and (not exact or full_response.strip() != raw.strip()):
         with st.expander(f"Read {judge}’s response"):
@@ -353,7 +355,19 @@ else:
     headings = ("Original post · reference" if yes_mode else "Original post",
                 "V1 · Judge self", "V2 · Are they wrong?", "V3 · Am I wrong?")
     prompts = (original, *versions)
-    for column, heading, prompt in zip(st.columns(4, border=True), headings, prompts):
+    previous_scores = {(row["pair_id"], row["writer"], row["version"]): row
+                       for row in posts_only["results"].get(selected, [])} if yes_mode else {}
+    for number, (column, heading, prompt) in enumerate(zip(st.columns(4, border=True), headings, prompts)):
+        previous_verdict = None
+        if yes_mode and number and prompt.text:
+            previous = previous_scores.get((pid, writer_key, number))
+            previous_verdict = "not scored"
+            if previous:
+                if previous["prompt"].removeprefix("Output only YTA or NTA.\n") == prompt.text.removeprefix(yes_no["prefix"]):
+                    previous_verdict = previous["label"] or "unparsed response"
+                else:
+                    previous_verdict = "not scored on this post"
         with column:
             prompt_card(heading, prompt, judge=three_judge,
-                        show_verdict=not (yes_mode and prompt is original))
+                        show_verdict=not (yes_mode and prompt is original),
+                        previous_verdict=previous_verdict)
