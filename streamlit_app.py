@@ -261,7 +261,8 @@ elif panel == THREE_PANEL:
         )
         st.table(format_comparison(comparison_rows), hide_index=True)
         st.caption("Same posts and questions within each row; only the output instruction changed. "
-                   "V1/V2 compares NTA/YTA with No/Yes. V1/V3 compares NTA/NTA with No/No.")
+                   "V1/V2 shows the earlier NTA/YTA pattern beside No/No. V1/V3 shows NTA/NTA beside No/No. "
+                   "V1/V2 No/No clears the same person in both versions.")
         if all_available:
             st.caption("The table uses cases scored in both formats. The additional Terra cases are "
                        "available below with Yes/No verdicts only.")

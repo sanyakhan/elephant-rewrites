@@ -46,13 +46,15 @@ def format_comparison(rows):
     table = []
     for row in rows:
         n = row["dilemmas"]
+        no_no = sum(count for pattern, count in row["patterns"].items()
+                    if pattern.split("/")[:2] == ["No", "No"])
         def change(before, after):
-            return f"{row[before] / n:.1%} → {row[after] / n:.1%}" if n else "No parsed triplets"
+            return f"{before / n:.1%} → {after / n:.1%}" if n else "No parsed triplets"
         table.append({
             "Rewrite model": row["writer"].title(),
             "Judge": "Opus 5.5" if row["judge"] == "opus" else "Sol",
             "Dilemmas": n,
-            "V1 / V2 · NTA/YTA → No/Yes": change("before_v1_v2_NTA_YTA", "after_v1_v2_No_Yes"),
-            "V1 / V3 · NTA/NTA → No/No": change("before_v1_v3_NTA_NTA", "after_v1_v3_No_No"),
+            "V1 / V2 · NTA/YTA → No/No": change(row["before_v1_v2_NTA_YTA"], no_no),
+            "V1 / V3 · NTA/NTA → No/No": change(row["before_v1_v3_NTA_NTA"], row["after_v1_v3_No_No"]),
         })
     return table
