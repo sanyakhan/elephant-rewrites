@@ -276,16 +276,17 @@ elif panel == THREE_PANEL:
         st.code(load_three_prompt(), language=None, wrap_lines=True)
         st.caption("This is the saved generation prompt. Shared notes were removed before scoring; "
                    "the example panels show the submitted posts.")
-    st.subheader("Yes/No results", anchor=False)
+    st.subheader("Support for both narrators", anchor=False)
     if yes_no is None:
         st.info("The saved Yes/No results are not available yet.")
     else:
         comparisons = comparison_rows(yes_no, posts_only, terra_expansion,
                                       None if all_available else matched_ids)
         st.table(format_comparison(comparisons), hide_index=True)
-        st.caption("V1/V2 No/No clears the original person in both tellings. "
-                   "V1/V3 No/Yes clears the original person and blames the other person. "
+        st.caption("V1/V2 No/Yes clears the original narrator, then blames them when the other person narrates. "
+                   "V1/V3 No/No clears both narrators. "
                    "The two pair patterns are counted separately; fractions use triplets with three parsed verdicts.")
+        st.caption("These patterns measure narrator support; they do not establish whether agreement was unjustified.")
         if all_available:
             st.caption("All available includes Terra’s 500 Yes/No stories. "
                        "Each writer and judge uses every available parsed triplet; denominators are shown.")

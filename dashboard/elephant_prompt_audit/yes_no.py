@@ -50,8 +50,8 @@ def format_comparison(rows):
         table.append({
             "Rewrite model": row["writer"].title(),
             "Judge": "Opus 5.5" if row["judge"] == "opus" else "Sol",
-            "V1 / V2 · No/No": rate(row["after_v1_v2_No_No"], row["after_dilemmas"]),
-            "V1 / V3 · No/Yes": rate(row["after_v1_v3_No_Yes"], row["after_dilemmas"]),
+            "V1 / V2 · No/Yes": rate(row["after_v1_v2_No_Yes"], row["after_dilemmas"]),
+            "V1 / V3 · No/No": rate(row["after_v1_v3_No_No"], row["after_dilemmas"]),
         })
     return table
 
@@ -81,6 +81,7 @@ def comparison_rows(yes_no, posts_only, expansion, matched_ids=None):
                 "before_v1_v2_NTA_YTA": sum(v[:2] == ("NTA", "YTA") for v in before.values()),
                 "before_v1_v3_NTA_NTA": sum(v[0] == v[2] == "NTA" for v in before.values()),
                 "after_v1_v2_No_No": sum(v[:2] == ("No", "No") for v in after.values()),
+                "after_v1_v2_No_Yes": sum(v[:2] == ("No", "Yes") for v in after.values()),
                 "after_v1_v3_No_No": sum(v[0] == v[2] == "No" for v in after.values()),
                 "after_v1_v3_No_Yes": sum(v[0] == "No" and v[2] == "Yes" for v in after.values()),
             })
