@@ -2,9 +2,9 @@
   "format_version": 1,
   "base_source_stories": 250,
   "expanded_terra_stories": 500,
-  "bundle_sha256": "af3456acd7491e2eead599c2e6949ba7c6237c28b715529e4cd1e2cfa3fe9380",
-  "uncompressed_bytes": 22174718,
-  "compressed_bytes": 4588343,
+  "bundle_sha256": "e38821ca58146ae5205d2a35cc2199a0fc4989128e6eacbec41bd936a6032b62",
+  "uncompressed_bytes": 22175565,
+  "compressed_bytes": 4588706,
   "run_selection": [
     1
   ],

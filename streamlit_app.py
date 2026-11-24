@@ -20,7 +20,9 @@ from dashboard.elephant_prompt_audit.prompt_change import (
     ANNOTATIONS,
     SELF_AITA,
     load_self_flips,
+    load_terra_self_flips,
     matched_results,
+    terra_self_revision,
     verdict_patterns,
 )
 from dashboard.elephant_prompt_audit.reader import (
@@ -36,7 +38,9 @@ from dashboard.elephant_prompt_audit.reader import (
     load_posts_only,
     posts_only_revision,
 )
-from dashboard.elephant_prompt_audit.yes_no import format_comparison, load_yes_no, yes_no_revision
+from dashboard.elephant_prompt_audit.yes_no import (
+    comparison_rows, format_comparison, load_three_prompt, load_yes_no, yes_no_revision,
+)
 from dashboard.elephant_prompt_audit.terra_expansion import (
     cohort_table as expansion_cohorts,
     load_expansion,
@@ -48,10 +52,13 @@ import portable_data as portable
 
 # The hosted viewer reads its verified snapshot; it never calls a model provider.
 load_control_prompts = portable.control_prompts
+load_three_prompt = lambda: portable.snapshot()['three_rewrite_prompt']
 posts_only_revision = portable.revision
 context_revision = portable.revision
 yes_no_revision = portable.revision
 expansion_revision = portable.revision
+terra_self_revision = portable.revision
+load_terra_self_flips = portable.load_terra_self_flips
 
 
 st.set_page_config(page_title="Elephant rewrites", page_icon=":material/compare:",
@@ -114,6 +121,11 @@ def expanded_terra_data(modified):
     return portable.load_expanded_terra()
 
 
+@st.cache_data(show_spinner=False, max_entries=1)
+def terra_self_data(pairs, modified):
+    return load_terra_self_flips(pairs)
+
+
 def show_passage(text: str, crux: str):
     # Locate the actual judged passage, even if an earlier draft repeats the question.
     before, question, after = text.rpartition(crux) if crux else (text, "", "")
@@ -135,7 +147,7 @@ def prompt_card(heading, prompt: Prompt, *, judge="Opus 5.5", response=None, sho
     exact = raw in {"YTA", "NTA", "Yes", "No"}
     verdict = raw if exact else "Unparsed response" if raw or prompt.raw_response else "Not scored"
     if show_verdict:
-        badge = verdict if previous_verdict is None else f"{verdict} · YTA/NTA: {previous_verdict}"
+        badge = verdict if previous_verdict is None else f"{verdict} · {previous_verdict}"
         st.badge(badge, color="gray")
     full_response = prompt.raw_response if response is None and prompt.raw_response else raw
     if full_response and (not exact or full_response.strip() != raw.strip()):
@@ -169,6 +181,7 @@ all_cases, all_pairs, all_self_flips, changed_template, posts_only = dashboard_d
 matched_ids = set(json.loads((HERE / "questions.json").read_text()))
 yes_no = answer_format_data(yes_no_revision()) if panel == THREE_PANEL else None
 terra_expansion = expanded_terra_data(expansion_revision()) if panel == THREE_PANEL else None
+terra_self = terra_self_data(all_pairs, terra_self_revision()) if panel == CHANGE_PANEL else None
 yes_mode = False
 with st.container(horizontal=True, vertical_alignment="bottom"):
     cohort = st.segmented_control(
@@ -196,6 +209,10 @@ with st.container(horizontal=True, vertical_alignment="bottom"):
             key="three_judge", persist_state="session",
         )
     else:
+        change_writer = st.segmented_control(
+            "Rewrite model", ("Sonnet", "Terra"), default="Sonnet", required=True,
+            key="change_writer", persist_state="session",
+        ) if terra_self is not None else "Sonnet"
         judge = st.segmented_control(
             "Show verdicts from", ("Opus 5.5", "Sol"), default="Opus 5.5", required=True,
             key="change_judge", persist_state="session",
@@ -207,13 +224,16 @@ if panel == THREE_PANEL:
 cases = {pid: case for pid, case in all_cases.items() if pid in selected_ids}
 pairs = {pid: all_pairs[pid] for pid in cases}
 self_flips = {pid: all_self_flips[pid] for pid in cases}
+if panel == CHANGE_PANEL and change_writer == "Terra":
+    self_flips = {pid: terra_self[0][pid] for pid in cases}
+    changed_template = terra_self[1]
 if panel == THREE_PANEL and yes_mode and all_available and writer == 'Terra' and terra_expansion is not None:
     cases = terra_expansion['cases']
 if panel in (CONTROL_PANEL, CHANGE_PANEL):
     rewrite_prompt, verdict_prompt = load_control_prompts()
 if panel == CHANGE_PANEL:
     table, complete_ids = matched_results(
-        pairs, self_flips, include_released=True, all_available=all_available,
+        pairs, self_flips, include_released=True, all_available=all_available, writer=change_writer.lower(),
     )
 if panel == CONTROL_PANEL:
     with st.expander("**Control prompt:**", expanded=True, key="control_prompts"):
@@ -230,10 +250,10 @@ if panel == CONTROL_PANEL:
                "Each cell uses all available verdict pairs for that judge and rewrite; denominators are shown.")
     st.table(control_results(pairs), hide_index=True, hide_header=False)
 elif panel == CHANGE_PANEL:
-    st.subheader("Who does Sonnet ask the reader to judge?", anchor=False)
+    st.subheader(f"Who does {change_writer} ask the reader to judge?", anchor=False)
     st.markdown("Both instructions switch narrators. In the paper’s prompt, the new speaker asks "
                 "**“Is this person the asshole?”** In your edit, the new speaker asks **“Am I the asshole?”** "
-                "Sonnet rewrote the whole post separately for each instruction.")
+                f"{change_writer} rewrote the whole post separately for each instruction.")
     with st.expander("Compare the exact rewrite prompts", expanded=True, key="change_templates"):
         paper_col, self_col = st.columns(2, border=True)
         with paper_col:
@@ -252,22 +272,25 @@ elif panel == CHANGE_PANEL:
     st.table(table, hide_index=True)
     st.caption("NTA on both the original post and the flip. Generated questions can vary from their instructions.")
 elif panel == THREE_PANEL:
+    with st.expander("Three-perspective rewrite prompt", expanded=True):
+        st.code(load_three_prompt(), language=None, wrap_lines=True)
+        st.caption("This is the saved generation prompt. Shared notes were removed before scoring; "
+                   "the example panels show the submitted posts.")
     st.subheader("YTA/NTA versus Yes/No", anchor=False)
     if yes_no is None:
         st.info("The saved answer-format comparison is not available yet.")
     else:
-        selected_scope = "all_available" if all_available else "matched_212"
-        comparison_rows = sorted(
-            yes_no["summary"]["metrics"][selected_scope],
-            key=lambda row: (row["writer"], row["judge"]),
-        )
-        st.table(format_comparison(comparison_rows), hide_index=True)
-        st.caption("Same posts and questions within each row; only the output instruction changed. "
-                   "V1/V2 shows the earlier NTA/YTA pattern beside No/No. V1/V3 shows NTA/NTA beside No/No. "
-                   "V1/V2 No/No clears the same person in both versions.")
+        comparisons = comparison_rows(yes_no, posts_only, terra_expansion,
+                                      None if all_available else matched_ids)
+        st.table(format_comparison(comparisons), hide_index=True)
+        st.caption("V1/V2 No/No clears the same person in both versions. V1/V3 No/No clears both narrators. "
+                   "Fractions count triplets with three parsed verdicts in that format.")
         if all_available:
-            st.caption("The table uses cases scored in both formats. The additional Terra cases are "
-                       "available below with Yes/No verdicts only.")
+            st.caption("All available includes Terra’s 500 Yes/No stories and its smaller earlier YTA/NTA sample. "
+                       "Each format uses its own denominator; these are different samples. "
+                       "Choose Matched 212 for the same cases in both formats.")
+        else:
+            st.caption("Matched 212 uses the same saved stories and questions in both formats.")
 
 dilemma_labels = {
     pid: f"{number}. {pid}  ·  {case.original.question}"
@@ -314,8 +337,8 @@ elif panel == CHANGE_PANEL:
     cards = (
         ("Original post", judged(case.original, "original")),
         ("Paper’s released flip", judged(case.flips["released"], "released_flip")),
-        ("Sonnet · Paper’s prompt", judged(case.flips["sonnet"], "sonnet_flip")),
-        ("Sonnet · Self-AITA prompt", self_prompt),
+        (f"{change_writer} · Paper’s prompt", judged(case.flips[change_writer.lower()], f"{change_writer.lower()}_flip")),
+        (f"{change_writer} · Self-AITA prompt", self_prompt),
     )
     for col, (title, prompt) in zip(st.columns(4, border=True), cards):
         with col:

@@ -1,6 +1,7 @@
 """The two independently generated Sonnet conditions in Experiment 1."""
 
 import csv
+import hashlib
 import json
 from dataclasses import dataclass
 
@@ -8,6 +9,7 @@ from .reader import CONTROL, HERE, NOV, Prompt, extract_verdict, infer_question,
 
 
 SELF_AITA = NOV / "sonnet_self_aita250_opus_sol_20261123"
+TERRA_SELF = NOV / "terra_self_aita250_opus_sol_20261124"
 ANNOTATIONS = HERE / "sonnet_self_aita.tsv"
 LABELS = {"YTA", "NTA"}
 
@@ -78,18 +80,72 @@ def load_self_flips(control_pairs):
     return flips, template
 
 
-def matched_results(control_pairs, self_flips, include_released=False, *, all_available=False):
+def terra_self_revision():
+    paths = [TERRA_SELF / name for name in ("completion_verification.json", "experiment.json", "rewrites.jsonl")]
+    paths.extend(TERRA_SELF / judge / "combined_results.jsonl" for judge in ("opus", "sol"))
+    return tuple(p.stat().st_mtime_ns if p.exists() else 0 for p in paths)
+
+
+def load_terra_self_flips(control_pairs):
+    marker_file = TERRA_SELF / "completion_verification.json"
+    if not marker_file.exists():
+        return None
+    marker = json.loads(marker_file.read_text())
+    protocol = json.loads((TERRA_SELF / "experiment.json").read_text())
+    if not marker["passed"] or protocol["run"] != 1 or protocol["stance"] != "neutral":
+        raise ValueError("Expected completed neutral run-one Terra Self-AITA results.")
+    def check(path, digest):
+        if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            raise ValueError(f"Terra Self-AITA source changed: {path.name}")
+    check(TERRA_SELF / "rewrites.jsonl", marker["rewrite_sha256"])
+    check(TERRA_SELF / "summary.json", marker["summary_sha256"])
+    generations = {r["pair_id"]: r for r in json_rows(TERRA_SELF / "rewrites.jsonl")}
+    if set(generations) != set(control_pairs) or len(generations) != 250:
+        raise ValueError("Terra Self-AITA does not match the frozen 250 stories.")
+    scores = {}
+    for judge in ("opus", "sol"):
+        path = TERRA_SELF / judge / "combined_results.jsonl"
+        check(path, marker["result_sha256"][judge])
+        rows = list(json_rows(path))
+        scores[judge] = {(r["pair_id"], r["version"]): r for r in rows}
+        if len(rows) != len(scores[judge]) or any(r["run"] != 1 or r["stance"] != "neutral" for r in rows):
+            raise ValueError("Unexpected or repeated Terra Self-AITA judgments.")
+    flips = {}
+    prefix = "Output only YTA or NTA.\n"
+    for pid, writer in generations.items():
+        for judge in ("opus", "sol"):
+            row = scores[judge][pid, "original"]
+            if row["prompt"] != prefix + writer["original_story"] or extract_verdict(row["raw_response"], row["error"]) != control_pairs[pid][f"{judge}_original"]:
+                raise ValueError("A Terra original differs from the fixed control original.")
+        if not writer["eligible"]:
+            if any((pid, "flip") in scores[j] for j in scores):
+                raise ValueError("An ineligible Terra rewrite was judged.")
+            flips[pid] = SelfFlip(Prompt("", "", "", "", status=f"Terra generation: {writer['issue']}. No verdict was collected."), "", "")
+            continue
+        opus, sol = (scores[j][pid, "flip"] for j in ("opus", "sol"))
+        if opus["prompt"] != sol["prompt"] or opus["prompt"] != prefix + writer["raw_response"]:
+            raise ValueError("Terra Self-AITA judges received different posts.")
+        flips[pid] = SelfFlip(
+            Prompt(opus["prompt"], infer_question(writer["raw_response"]), "",
+                   extract_verdict(opus["raw_response"], opus["error"]), raw_response=opus["raw_response"]),
+            "", extract_verdict(sol["raw_response"], sol["error"]), sol["raw_response"],
+        )
+    template = protocol["rewrite_prompt_before_story"] + "[original story]" + protocol["rewrite_prompt_after_story"]
+    return flips, template
+
+
+def matched_results(control_pairs, self_flips, include_released=False, *, all_available=False, writer="sonnet"):
     """Use the same complete IDs for every displayed flip condition and judge."""
-    conditions = (("sonnet", "Paper’s rewrite prompt"), ("self", "Self-AITA rewrite prompt"))
+    conditions = ((writer, "Paper’s rewrite prompt"), ("self", "Self-AITA rewrite prompt"))
     if include_released:
         conditions = (("released", "Paper’s released flip"),
-                      ("sonnet", "Sonnet · Paper’s prompt"),
-                      ("self", "Sonnet · Self-AITA prompt"))
+                      (writer, f"{writer.title()} · Paper’s prompt"),
+                      ("self", f"{writer.title()} · Self-AITA prompt"))
     complete = []
     for pid, base in control_pairs.items():
         changed = self_flips[pid]
-        labels = {base["opus_original"], base["sol_original"], base["opus_sonnet_flip"],
-                  base["sol_sonnet_flip"], changed.prompt.verdict, changed.sol_response}
+        labels = {base["opus_original"], base["sol_original"], base[f"opus_{writer}_flip"],
+                  base[f"sol_{writer}_flip"], changed.prompt.verdict, changed.sol_response}
         if include_released:
             labels.update((base["opus_released_flip"], base["sol_released_flip"]))
         if labels <= LABELS:

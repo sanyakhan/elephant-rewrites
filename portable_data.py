@@ -15,11 +15,11 @@ DATA = HERE / 'data/dashboard.json.gz'
 
 
 def revision():
-    return (DATA.stat().st_mtime_ns,)
+    return (DATA.stat().st_mtime_ns, DATA.with_name('manifest.json').stat().st_mtime_ns)
 
 
 @lru_cache(maxsize=1)
-def snapshot():
+def _snapshot(stamp):
     content = DATA.read_bytes()
     manifest = json.loads((DATA.parent / 'manifest.json').read_text())
     if hashlib.sha256(content).hexdigest() != manifest['bundle_sha256']:
@@ -28,6 +28,10 @@ def snapshot():
     if value['format_version'] != 1:
         raise ValueError('Unsupported dashboard snapshot version.')
     return value
+
+
+def snapshot():
+    return _snapshot(revision())
 
 
 def make_cases(rows):
@@ -53,6 +57,16 @@ def load_dashboard_data():
 def load_expanded_terra():
     value = snapshot()['terra_expansion']
     return {**value, 'cases': make_cases(value['cases'])}
+
+
+def load_terra_self_flips(pairs):
+    value = snapshot().get('terra_self')
+    if value is None:
+        return None
+    flips = {pid: SelfFlip(prompt=Prompt(**row['prompt']), target=row['target'],
+                          sol_response=row['sol_response'], sol_raw_response=row['sol_raw_response'])
+             for pid, row in value['flips'].items()}
+    return flips, value['template']
 
 
 def control_prompts():

@@ -45,17 +45,52 @@ def load_yes_no():
 def format_comparison(rows):
     table = []
     for row in rows:
-        n = row["dilemmas"]
-        no_no = sum(count for pattern, count in row["patterns"].items()
-                    if pattern.split("/")[:2] == ["No", "No"])
-        def change(before, after):
-            return (f"{before / n:.1%} ({before}/{n}) → {after / n:.1%} ({after}/{n})"
-                    if n else "No parsed triplets")
+        def rate(count, n):
+            return f"{count / n:.1%} ({count}/{n})" if n else "Not scored"
         table.append({
             "Rewrite model": row["writer"].title(),
             "Judge": "Opus 5.5" if row["judge"] == "opus" else "Sol",
-            "Dilemmas": n,
-            "V1 / V2 · NTA/YTA → No/No": change(row["before_v1_v2_NTA_YTA"], no_no),
-            "V1 / V3 · NTA/NTA → No/No": change(row["before_v1_v3_NTA_NTA"], row["after_v1_v3_No_No"]),
+            "V1 / V2 · NTA/YTA": rate(row["before_v1_v2_NTA_YTA"], row["before_dilemmas"]),
+            "V1 / V2 · No/No": rate(row["after_v1_v2_No_No"], row["after_dilemmas"]),
+            "V1 / V3 · NTA/NTA": rate(row["before_v1_v3_NTA_NTA"], row["before_dilemmas"]),
+            "V1 / V3 · No/No": rate(row["after_v1_v3_No_No"], row["after_dilemmas"]),
         })
     return table
+
+
+def comparison_rows(yes_no, posts_only, expansion, matched_ids=None):
+    """Count actual completed triplets, including the full Terra expansion."""
+    output = []
+    def triplets(source, judge, writer, labels):
+        grouped = {}
+        for row in source["results"].get(judge, []):
+            if row["writer"] != writer or (matched_ids is not None and row["pair_id"] not in matched_ids):
+                continue
+            grouped.setdefault(row["pair_id"], {})[row["version"]] = row["label"]
+        return {pid: tuple(values.get(v, "") for v in (1, 2, 3)) for pid, values in grouped.items()
+                if all(values.get(v) in labels for v in (1, 2, 3))}
+    for writer in ("sonnet", "terra"):
+        after_source = expansion if writer == "terra" and matched_ids is None and expansion else yes_no
+        for judge in ("opus", "sol"):
+            before = triplets(posts_only, judge, writer, {"NTA", "YTA"})
+            after = triplets(after_source, judge, writer, {"Yes", "No"})
+            if matched_ids is not None:
+                common = before.keys() & after.keys()
+                before = {pid: before[pid] for pid in common}
+                after = {pid: after[pid] for pid in common}
+            output.append({
+                "writer": writer, "judge": judge, "before_dilemmas": len(before), "after_dilemmas": len(after),
+                "before_v1_v2_NTA_YTA": sum(v[:2] == ("NTA", "YTA") for v in before.values()),
+                "before_v1_v3_NTA_NTA": sum(v[0] == v[2] == "NTA" for v in before.values()),
+                "after_v1_v2_No_No": sum(v[:2] == ("No", "No") for v in after.values()),
+                "after_v1_v3_No_No": sum(v[0] == v[2] == "No" for v in after.values()),
+            })
+    return output
+
+
+def load_three_prompt():
+    source = json.loads((NOV / "three_versions_sonnet250_20261122/experiment.json").read_text())
+    expanded = json.loads((NOV / "terra500_three_versions_yes_no_20261123/experiment.json").read_text())
+    if source["prompt_before_story"] != expanded["rewrite_prompt_before_story"]:
+        raise ValueError("The three-version writers used different rewrite prompts.")
+    return source["prompt_before_story"] + "[original story]"
