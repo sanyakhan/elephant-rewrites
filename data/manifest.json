@@ -2,9 +2,9 @@
   "format_version": 1,
   "base_source_stories": 250,
   "expanded_terra_stories": 500,
-  "bundle_sha256": "e38821ca58146ae5205d2a35cc2199a0fc4989128e6eacbec41bd936a6032b62",
-  "uncompressed_bytes": 22175565,
-  "compressed_bytes": 4588706,
+  "bundle_sha256": "48c94259e452ac3b6799fe50bcf9d7e72ad3f68d49250c6af4e14292e2f33da1",
+  "uncompressed_bytes": 22636167,
+  "compressed_bytes": 4731054,
   "run_selection": [
     1
   ],
@@ -50,6 +50,20 @@
       "result_sha256": {
         "opus": "559833cfb620c02cb51e634816581653ac23375e85115ed9a68ef718f532d04c",
         "sol": "e230bc3b90b8e9a5aab39ac99c1592495a77e0df62230342bb6d3291ce870ddc"
+      }
+    },
+    "terra_self_aita250_opus_sol_20261124": {
+      "passed": true,
+      "completed_at": "2026-11-25T20:09:26.460888+00:00",
+      "run": 1,
+      "stance": "neutral",
+      "source_stories": 250,
+      "judged_rewrites_per_model": 249,
+      "summary_sha256": "b2f8bddcbb6e36d9e2ee5c78537cf9edd85be9d6a8d829800a34547ef87f6829",
+      "rewrite_sha256": "f40d1a4f25eb56cdcb0893bd028450092ebf0c3777afa1b448a1afdb190cb1ac",
+      "result_sha256": {
+        "opus": "ed4fa96f876a8c8ea50031e22a2af117fd277b04e45985d7c1381a96d2a95041",
+        "sol": "c1fdec3234a3ab5456d98ae3a6cfa1f9af72c9d538304a54c9acaf982ead2497"
       }
     }
   }
